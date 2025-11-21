@@ -19,6 +19,15 @@
   .card { background:#ffffffb0; border-radius:10px; padding:10px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); text-align:center; }
   body.dark .card { background:#161b22; }
 
+  footer {
+    text-align:center;
+    margin-top:30px;
+    font-size:0.9em;
+    opacity:0.7;
+    transition: color 0.5s;
+  }
+  body.dark footer { color:#aaa; }
+
   /* 📱 Mobile horizontale Scroll-Karte */
   @media (max-width: 768px) {
     .forecast {
@@ -43,6 +52,13 @@
 </div>
 <div id="current"></div>
 <div class="forecast" id="forecast"></div>
+
+<footer>
+  🌍 Datenquelle: 
+  <a href="https://open-meteo.com/" target="_blank">Open-Meteo</a> &amp; 
+  <a href="https://www.openstreetmap.org/" target="_blank">OpenStreetMap</a><br>
+  © 2025 Deine Wetter-WebApp – Alle Angaben ohne Gewähr.
+</footer>
 
 <script>
 const locationInput=document.getElementById('location'),
