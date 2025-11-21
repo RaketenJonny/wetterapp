@@ -27,21 +27,6 @@
     transition: color 0.5s;
   }
   body.dark footer { color:#aaa; }
-
-  /* 📱 Mobile horizontale Scroll-Karte */
-  @media (max-width: 768px) {
-    .forecast {
-      display:flex;
-      overflow-x:auto;
-      scroll-snap-type:x mandatory;
-      -webkit-overflow-scrolling:touch;
-      gap:12px;
-    }
-    .card {
-      flex: 0 0 150px;
-      scroll-snap-align:center;
-    }
-  }
 </style>
 </head>
 <body>
