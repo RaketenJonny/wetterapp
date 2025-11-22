@@ -1,152 +1,244 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>🌦️ Wetter WebApp – Stadt oder PLZ</title>
-<style>
-  body {
-    font-family: 'Inter', sans-serif;
-    margin: 0; padding: 20px;
-    background: #f5f9ff; color: #111;
-    transition: background 0.5s, color 0.5s;
-  }
-  body.dark { background: #0d1117; color: #eee; }
-  #themeToggle { position: fixed; top:10px; right:10px; background:none; border:none; cursor:pointer; font-size:24px; }
-  h1 { text-align:center; }
-  input { width:90%; max-width:350px; padding:10px; border-radius:8px; border:1px solid #ccc; }
-  .forecast { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-top:30px; }
-  .card { background:#ffffffb0; border-radius:10px; padding:10px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); text-align:center; }
-  body.dark .card { background:#161b22; }
 
-  footer {
-    text-align:center;
-    margin-top:30px;
-    font-size:0.9em;
-    opacity:0.7;
-    transition: color 0.5s;
+<!--
+  Init Theme so früh wie möglich: lesen von localStorage oder System-Preference.
+  Dadurch ist das Theme bereits gesetzt bevor die Seite gerendert wird
+  — kein falscher Button-Status mehr beim ersten Paint.
+-->
+<script>
+(function(){
+  try {
+    const saved = localStorage.getItem('theme'); // "dark" | "light" | null
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const isDark = saved ? (saved === 'dark') : prefersDark;
+    if (isDark) {
+      // Setze Klasse auf <html> damit CSS sofort greift (Body existiert evtl. noch nicht)
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    // Globale Info, damit spätere Scripts genau wissen, was initial gesetzt wurde
+    window.__INITIAL_THEME_DARK = isDark;
+  } catch(e) {
+    // Fail silently
+    window.__INITIAL_THEME_DARK = false;
   }
-  body.dark footer { color:#aaa; }
+})();
+</script>
+
+<style>
+  /* Basis */
+  html,body { margin:0; padding:0; }
+  body {
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    padding: 20px;
+    background: #f5f9ff;
+    color: #111827;
+    transition: background .25s ease, color .25s ease;
+  }
+
+  /* Dark Mode: wir prüfen die Klasse auf <html> (wurde im head gesetzt) */
+  html.dark body {
+    background: #000000;
+    color: #e5e7eb;
+  }
+
+  #themeToggle {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 26px;
+    line-height: 1;
+  }
+
+  h1 { text-align:center; margin-top:6px; }
+
+  input {
+    width: 90%;
+    max-width: 350px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+  }
+
+  .forecast {
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+    gap:10px;
+    margin-top:30px;
+  }
+
+  .card {
+    background: rgba(255,255,255,0.75);
+    border-radius:10px;
+    padding:10px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    text-align:center;
+  }
+
+  /* Dark card styling when html.dark is present */
+  html.dark .card {
+    background: #1f2937;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  }
+
+  footer { text-align:center; margin-top:30px; font-size:0.9rem; opacity:0.85; }
 </style>
 </head>
 <body>
-<button id="themeToggle">🌙</button>
+
+<!-- Button startet mit neutralem Inhalt, Script unten setzt richtigen Icon & Label sofort -->
+<button id="themeToggle" aria-label="Theme wechseln" title="Theme wechseln">⏳</button>
+
 <h1>🌤️ Wetter WebApp – Stadt oder PLZ</h1>
+
 <div style="text-align:center;">
-  <input type="text" id="location" placeholder="Stadt oder PLZ eingeben..." />
+  <input id="location" type="text" placeholder="Stadt oder PLZ eingeben..." />
 </div>
+
 <div id="current"></div>
 <div class="forecast" id="forecast"></div>
 
 <footer>
-  🌍 Datenquelle: 
-  <a href="https://open-meteo.com/" target="_blank">Open-Meteo</a> &amp; 
-  <a href="https://www.openstreetmap.org/" target="_blank">OpenStreetMap</a><br>
-  © 2025 Deine Wetter-WebApp – Alle Angaben ohne Gewähr.
+  🌍 Datenquelle:
+  <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> &
+  <a href="https://www.openstreetmap.org/" target="_blank" rel="noopener">OpenStreetMap</a><br>
+  © 2025 Deine Wetter-WebApp
 </footer>
 
 <script>
-const locationInput=document.getElementById('location'),
-currentDiv=document.getElementById('current'),
-forecastDiv=document.getElementById('forecast'),
-toggle=document.getElementById('themeToggle');
+/* ===== THEME TOGGLE (robust) =====
+   - Benutzt initialen Wert aus window.__INITIAL_THEME_DARK
+   - Aktualisiert html.classList und localStorage
+   - Icon zeigt die A C T I O N an:
+       • Wenn aktuell Dark aktiv ist -> zeige ☀️ (Klick = zu Light wechseln)
+       • Wenn aktuell Light aktiv ist -> zeige 🌙 (Klick = zu Dark wechseln)
+*/
 
-toggle.onclick=()=>{document.body.classList.toggle('dark');toggle.textContent=document.body.classList.contains('dark')?'☀️':'🌙';};
-if(window.matchMedia('(prefers-color-scheme: dark)').matches)document.body.classList.add('dark');
+const toggle = document.getElementById('themeToggle');
 
-locationInput.addEventListener('change',()=>fetchWeather(locationInput.value));
-
-async function fetchWeather(input){
- if(!input)return;
- currentDiv.innerHTML="<p>⏳ Lädt...</p>";
- forecastDiv.innerHTML="";
- try{
-  let query='';
-  if(/^[0-9]{4,5}$/.test(input)){
-    query=`postalcode=${input}`;
+function applyTheme(isDark) {
+  if (isDark) {
+    document.documentElement.classList.add('dark');
   } else {
-    query=`q=${encodeURIComponent(input)}`;
+    document.documentElement.classList.remove('dark');
   }
+  // Icon zeigt die *Aktion*, also das, was beim Klick passiert
+  toggle.textContent = isDark ? '☀️' : '🌙';
+  toggle.setAttribute('title', isDark ? 'Zu hellem Theme wechseln' : 'Zu dunklem Theme wechseln');
+  toggle.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+}
 
-  const geo=await fetch(`https://nominatim.openstreetmap.org/search?${query}&countrycodes=de&format=json&limit=1&addressdetails=1`).then(r=>r.json());
-  if(!geo.length)return currentDiv.innerHTML="❌ Ort/PLZ nicht gefunden.";
+// initial setzen (kommt aus head-script)
+const initialDark = !!window.__INITIAL_THEME_DARK;
+applyTheme(initialDark);
 
-  const lat=parseFloat(geo[0].lat),lon=parseFloat(geo[0].lon);
-  const addr=geo[0].address;
-  const cityName = addr.city || addr.town || addr.village || addr.hamlet || addr.suburb || addr.county || "Unbekannt";
-  const plz = addr.postcode || input;
-  const display = `${cityName} (${plz})`;
+// Klick handler
+toggle.addEventListener('click', () => {
+  const isNowDark = !document.documentElement.classList.contains('dark');
+  applyTheme(isNowDark);
+  try {
+    localStorage.setItem('theme', isNowDark ? 'dark' : 'light');
+  } catch(e) { /* ignore storage errors */ }
+});
 
-  const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&timezone=auto`;
-  const data=await fetch(url).then(r=>r.json());
-  const c=data.current;
+/* ===== WEATHER APP ===== */
 
-  currentDiv.innerHTML=
-    `<h2>${display}</h2>
-     <p>🌡️ ${c.temperature_2m} °C – ${translateWeather(c.weather_code)}</p>
-     <p>💧 Luftfeuchte: ${c.relative_humidity_2m}% – 💨 Wind: ${c.wind_speed_10m} km/h</p>`;
+const locationInput = document.getElementById('location');
+const currentDiv = document.getElementById('current');
+const forecastDiv = document.getElementById('forecast');
 
-  const d=data.daily;
-  forecastDiv.innerHTML=d.time.map((t,i)=>
-    `<div class='card'>
+locationInput.addEventListener('change', () => fetchWeather(locationInput.value));
+
+async function fetchWeather(input) {
+  if (!input) return;
+  currentDiv.innerHTML = "<p>⏳ Lädt...</p>";
+  forecastDiv.innerHTML = "";
+  try {
+    const query = /^[0-9]{4,5}$/.test(input) ? `postalcode=${input}` : `q=${encodeURIComponent(input)}`;
+    const geo = await fetch(`https://nominatim.openstreetmap.org/search?${query}&countrycodes=de&format=json&limit=1&addressdetails=1`).then(r => r.json());
+    if (!geo.length) { currentDiv.innerHTML = "❌ Ort/PLZ nicht gefunden."; return; }
+
+    const lat = parseFloat(geo[0].lat), lon = parseFloat(geo[0].lon);
+    const addr = geo[0].address;
+    const city = addr.city || addr.town || addr.village || addr.hamlet || addr.suburb || addr.county || "Unbekannt";
+    const plz = addr.postcode || input;
+
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&timezone=auto`;
+    const data = await fetch(url).then(r => r.json());
+    const c = data.current;
+    currentDiv.innerHTML = `
+      <h2>${city} (${plz})</h2>
+      <p>${getWeatherIcon(c.weather_code)} ${getWeatherText(c.weather_code)}</p>
+      <p>🌡️ ${c.temperature_2m} °C</p>
+      <p>💧 Luftfeuchte: ${c.relative_humidity_2m}%</p>
+      <p>💨 Wind: ${c.wind_speed_10m} km/h</p>
+    `;
+
+    const d = data.daily;
+    forecastDiv.innerHTML = d.time.map((t,i) => `
+      <div class="card">
         <h4>${new Date(t).toLocaleDateString('de-DE',{weekday:'short'})}</h4>
-        <p>${translateWeather(d.weather_code[i])}</p>
-        <p>🌡️ ${d.temperature_2m_max[i]} / ${d.temperature_2m_min[i]}°C</p>
+        <p>${getWeatherIcon(d.weather_code[i])} ${getWeatherText(d.weather_code[i])}</p>
+        <p>🌡️ ${d.temperature_2m_max[i]} / ${d.temperature_2m_min[i]} °C</p>
         <p>☔ ${d.precipitation_probability_max[i]}%</p>
-     </div>`
-  ).join('');
+      </div>
+    `).join('');
 
- }catch(e){
-   currentDiv.innerHTML="Fehler beim Laden.";
- }
+  } catch(e) {
+    console.error(e);
+    currentDiv.innerHTML = "⚠️ Fehler beim Laden.";
+  }
 }
 
-function translateWeather(code){
-  const map = {
-    0: "☀️ Klar",
-    1: "🌤️ Überwiegend klar",
-    2: "⛅ Teilweise bewölkt",
-    3: "☁️ Bewölkt",
-
-    45: "🌫️ Nebel",
-    48: "🌫️ Nebel mit Reif",
-
-    51: "🌦️ Leichter Nieselregen",
-    53: "🌦️ Mäßiger Nieselregen",
-    55: "🌧️ Starker Nieselregen",
-
-    56: "🌧️ Gefrierender leichter Nieselregen",
-    57: "🌧️ Gefrierender starker Nieselregen",
-
-    61: "🌦️ Leichter Regen",
-    63: "🌧️ Mäßiger Regen",
-    65: "🌧️ Starker Regen",
-
-    66: "🌧️ Gefrierender leichter Regen",
-    67: "🌧️ Gefrierender starker Regen",
-
-    71: "🌨️ Leichter Schneefall",
-    73: "🌨️ Mäßiger Schneefall",
-    75: "❄️ Starker Schneefall",
-
-    77: "❄️ Schneekörner",
-
-    80: "🌦️ Leichte Regenschauer",
-    81: "🌧️ Mäßige Regenschauer",
-    82: "🌧️ Heftige Regenschauer",
-
-    85: "🌨️ Leichte Schneeschauer",
-    86: "❄️ Starke Schneeschauer",
-
-    95: "⛈️ Gewitter",
-    96: "⛈️ Gewitter mit leichtem Hagel",
-    99: "🌩️ Gewitter mit starkem Hagel",
+/* ===== Wettercodes & Icons ===== */
+function getWeatherIcon(code){
+  const icons = {
+    0:"☀️",1:"🌤️",2:"⛅",3:"☁️",
+    45:"🌫️",48:"🌫️",
+    51:"🌦️",53:"🌦️",55:"🌧️",
+    56:"🌧️",57:"🌧️",
+    61:"🌦️",63:"🌧️",65:"🌧️",
+    66:"🌧️",67:"🌧️",
+    71:"🌨️",73:"🌨️",75:"❄️",
+    77:"❄️",
+    80:"🌦️",81:"🌧️",82:"🌧️",
+    85:"🌨️",86:"❄️",
+    95:"⛈️",96:"⛈️",99:"⛈️"
   };
-
-  return map[code] || "❔ Unbekannt";
+  return icons[code] || "❔";
+}
+function getWeatherText(code){
+  const text = {
+    0:"Klar",1:"Überwiegend klar",2:"Teilweise bewölkt",3:"Bewölkt",
+    45:"Nebel",48:"Nebel mit Reif",
+    51:"Leichter Nieselregen",53:"Mäßiger Nieselregen",55:"Starker Nieselregen",
+    56:"Gefrierender Nieselregen",57:"Starker gefrierender Nieselregen",
+    61:"Leichter Regen",63:"Mäßiger Regen",65:"Starker Regen",
+    66:"Gefrierender Regen",67:"Starker gefrierender Regen",
+    71:"Leichter Schneefall",73:"Mäßiger Schneefall",75:"Starker Schneefall",
+    77:"Schneekörner",
+    80:"Leichte Regenschauer",81:"Mäßige Regenschauer",82:"Starke Regenschauer",
+    85:"Leichte Schneeschauer",86:"Starke Schneeschauer",
+    95:"Gewitter",96:"Gewitter mit Hagel",99:"Starkes Gewitter mit Hagel"
+  };
+  return text[code] || "Unbekannt";
 }
 
-setInterval(()=>{if(locationInput.value.trim())fetchWeather(locationInput.value.trim())},600000);
+/* Auto-refresh alle 10 Minuten */
+setInterval(() => {
+  if (locationInput.value.trim()) fetchWeather(locationInput.value.trim());
+}, 600000);
+
 </script>
+
 </body>
 </html>
