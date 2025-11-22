@@ -62,10 +62,8 @@ async function fetchWeather(input){
  forecastDiv.innerHTML="";
  try{
   let query='';
-  let isPostal=false;
   if(/^[0-9]{4,5}$/.test(input)){
     query=`postalcode=${input}`;
-    isPostal=true;
   } else {
     query=`q=${encodeURIComponent(input)}`;
   }
@@ -82,17 +80,70 @@ async function fetchWeather(input){
   const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&timezone=auto`;
   const data=await fetch(url).then(r=>r.json());
   const c=data.current;
-  currentDiv.innerHTML=`<h2>${display}</h2><p>🌡️ ${c.temperature_2m} °C – ${translateWeather(c.weather_code)}</p><p>💧 Luftfeuchte: ${c.relative_humidity_2m}% – 💨 Wind: ${c.wind_speed_10m} km/h</p>`;
+
+  currentDiv.innerHTML=
+    `<h2>${display}</h2>
+     <p>🌡️ ${c.temperature_2m} °C – ${translateWeather(c.weather_code)}</p>
+     <p>💧 Luftfeuchte: ${c.relative_humidity_2m}% – 💨 Wind: ${c.wind_speed_10m} km/h</p>`;
+
   const d=data.daily;
-  forecastDiv.innerHTML=d.time.map((t,i)=>`<div class='card'><h4>${new Date(t).toLocaleDateString('de-DE',{weekday:'short'})}</h4><p>${translateWeather(d.weather_code[i])}</p><p>🌡️ ${d.temperature_2m_max[i]} / ${d.temperature_2m_min[i]}°C</p><p>☔ ${d.precipitation_probability_max[i]}%</p></div>`).join('');
+  forecastDiv.innerHTML=d.time.map((t,i)=>
+    `<div class='card'>
+        <h4>${new Date(t).toLocaleDateString('de-DE',{weekday:'short'})}</h4>
+        <p>${translateWeather(d.weather_code[i])}</p>
+        <p>🌡️ ${d.temperature_2m_max[i]} / ${d.temperature_2m_min[i]}°C</p>
+        <p>☔ ${d.precipitation_probability_max[i]}%</p>
+     </div>`
+  ).join('');
+
  }catch(e){
    currentDiv.innerHTML="Fehler beim Laden.";
  }
 }
 
 function translateWeather(code){
- const map={0:"☀️ Klar",1:"🌤️ Meist klar",2:"⛅ Teilw. bewölkt",3:"☁️ Bewölkt",45:"🌫️ Nebel",48:"🌫️ Nebel mit Reif",51:"🌦️ Leicht. Niesel",53:"🌦️ Mäßig. Niesel",55:"🌧️ Stark. Niesel",61:"🌦️ Leicht. Regen",63:"🌧️ Mäßig. Regen",65:"🌧️ Stark. Regen",71:"🌨️ Leicht. Schnee",73:"🌨️ Mäßig. Schnee",75:"❄️ Stark. Schnee",95:"⛈️ Gewitter",99:"🌩️ Stark. Gewitter"};
- return map[code]||"❔ Unbekannt";
+  const map = {
+    0: "☀️ Klar",
+    1: "🌤️ Überwiegend klar",
+    2: "⛅ Teilweise bewölkt",
+    3: "☁️ Bewölkt",
+
+    45: "🌫️ Nebel",
+    48: "🌫️ Nebel mit Reif",
+
+    51: "🌦️ Leichter Nieselregen",
+    53: "🌦️ Mäßiger Nieselregen",
+    55: "🌧️ Starker Nieselregen",
+
+    56: "🌧️ Gefrierender leichter Nieselregen",
+    57: "🌧️ Gefrierender starker Nieselregen",
+
+    61: "🌦️ Leichter Regen",
+    63: "🌧️ Mäßiger Regen",
+    65: "🌧️ Starker Regen",
+
+    66: "🌧️ Gefrierender leichter Regen",
+    67: "🌧️ Gefrierender starker Regen",
+
+    71: "🌨️ Leichter Schneefall",
+    73: "🌨️ Mäßiger Schneefall",
+    75: "❄️ Starker Schneefall",
+
+    77: "❄️ Schneekörner",
+
+    80: "🌦️ Leichte Regenschauer",
+    81: "🌧️ Mäßige Regenschauer",
+    82: "🌧️ Heftige Regenschauer",
+
+    85: "🌨️ Leichte Schneeschauer",
+    86: "❄️ Starke Schneeschauer",
+
+    95: "⛈️ Gewitter",
+    96: "⛈️ Gewitter mit leichtem Hagel",
+    99: "🌩️ Gewitter mit starkem Hagel",
+  };
+
+  return map[code] || "❔ Unbekannt";
 }
 
 setInterval(()=>{if(locationInput.value.trim())fetchWeather(locationInput.value.trim())},600000);
